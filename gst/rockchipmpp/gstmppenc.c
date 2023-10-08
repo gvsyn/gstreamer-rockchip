@@ -405,7 +405,8 @@ gst_mpp_enc_set_src_caps (GstVideoEncoder * encoder, GstCaps * caps)
 
   gst_caps_set_simple (caps,
       "width", G_TYPE_INT, GST_VIDEO_INFO_WIDTH (info),
-      "height", G_TYPE_INT, GST_VIDEO_INFO_HEIGHT (info), NULL);
+      "height", G_TYPE_INT, GST_VIDEO_INFO_HEIGHT (info), 
+	  "framerate", GST_TYPE_FRACTION, GST_VIDEO_INFO_FPS_N (info), GST_VIDEO_INFO_FPS_D (info), NULL);
 
   GST_DEBUG_OBJECT (self, "output caps: %" GST_PTR_FORMAT, caps);
 
@@ -414,6 +415,9 @@ gst_mpp_enc_set_src_caps (GstVideoEncoder * encoder, GstCaps * caps)
 
   GST_VIDEO_INFO_WIDTH (&output_state->info) = GST_VIDEO_INFO_WIDTH (info);
   GST_VIDEO_INFO_HEIGHT (&output_state->info) = GST_VIDEO_INFO_HEIGHT (info);
+  GST_VIDEO_INFO_FPS_N (&output_state->info) = GST_VIDEO_INFO_FPS_N (info);
+  GST_VIDEO_INFO_FPS_D (&output_state->info) = GST_VIDEO_INFO_FPS_D (info);
+
   gst_video_codec_state_unref (output_state);
 
   return gst_video_encoder_negotiate (encoder);
@@ -580,7 +584,7 @@ gst_mpp_enc_set_format (GstVideoEncoder * encoder, GstVideoCodecState * state)
   GstMppEnc *self = GST_MPP_ENC (encoder);
   GstVideoInfo *info = &self->info;
   MppFrameFormat format;
-  gint width, height;
+  gint width, height, fps_n, fps_d;
   gboolean convert = FALSE;
 
   GST_DEBUG_OBJECT (self, "setting format: %" GST_PTR_FORMAT, state->caps);
@@ -605,7 +609,8 @@ gst_mpp_enc_set_format (GstVideoEncoder * encoder, GstVideoCodecState * state)
   format = gst_mpp_gst_format_to_mpp_format (GST_VIDEO_INFO_FORMAT (info));
   width = GST_VIDEO_INFO_WIDTH (info);
   height = GST_VIDEO_INFO_HEIGHT (info);
-
+  fps_n = GST_VIDEO_INFO_FPS_D (info);
+  fps_d = GST_VIDEO_INFO_FPS_N (info);
   if (self->rotation % 180)
     SWAP (width, height);
 
@@ -635,6 +640,9 @@ gst_mpp_enc_set_format (GstVideoEncoder * encoder, GstVideoCodecState * state)
 
     gst_video_info_set_format (info, gst_mpp_mpp_format_to_gst_format (format),
         width, height);
+	GST_VIDEO_INFO_FPS_D (info) = fps_n;
+	GST_VIDEO_INFO_FPS_N (info) = fps_d;
+
 
     if (!gst_mpp_enc_video_info_align (info))
       return FALSE;
@@ -811,7 +819,7 @@ convert:
   if (gst_mpp_use_rga () &&
       gst_mpp_rga_convert (inbuf, &src_info, out_mem, dst_info,
           self->rotation)) {
-    GST_DEBUG_OBJECT (self, "using RGA converted buffer");
+    GST_TRACE_OBJECT (self, "using RGA converted buffer");
     return outbuf;
   }
 #endif
@@ -947,7 +955,7 @@ gst_mpp_enc_loop (GstVideoEncoder * encoder)
   if (self->flushing && !self->draining)
     goto drop;
 
-  GST_DEBUG_OBJECT (self, "finish frame ts=%" GST_TIME_FORMAT,
+  GST_TRACE_OBJECT (self, "finish frame ts=%" GST_TIME_FORMAT,
       GST_TIME_ARGS (frame->pts));
 
   gst_video_encoder_finish_frame (encoder, frame);
@@ -986,7 +994,7 @@ gst_mpp_enc_handle_frame (GstVideoEncoder * encoder, GstVideoCodecFrame * frame)
   GstBuffer *buffer;
   GstFlowReturn ret = GST_FLOW_OK;
 
-  GST_DEBUG_OBJECT (self, "handling frame %d", frame->system_frame_number);
+  GST_TRACE_OBJECT (self, "handling frame %d", frame->system_frame_number);
 
   GST_MPP_ENC_LOCK (encoder);
 
